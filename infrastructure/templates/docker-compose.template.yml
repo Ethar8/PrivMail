@@ -1,0 +1,59 @@
+# PrivMail – Docker Compose Vorlage mit nginx-Reverse-Proxy.
+# Kopiere und passe sie bei Bedarf an docker-compose.yml an.
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: privmail
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - privmail-network
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DOMAIN: ${DOMAIN}
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/privmail
+      JWT_SECRET: ${JWT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+    depends_on:
+      - postgres
+    networks:
+      - privmail-network
+
+  frontend:
+    build: ./frontend/web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:3000
+    depends_on:
+      - backend
+    networks:
+      - privmail-network
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - privmail-network
+
+networks:
+  privmail-network:
+    driver: bridge

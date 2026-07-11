@@ -1,0 +1,11 @@
+/* Theme transitions and selection styling. Color tokens live in
+   src/app/globals.css. */
+
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+::selection {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}

@@ -1,0 +1,35 @@
+# PrivMail – Test-Compose mit ClamAV-Antivirus-Service.
+# Ergänzt das Haupt-Setup um einen parallelen ClamAV-Container (INSTREAM auf
+# Port 3310, nur im internen Netz). Nutzung:
+#   docker compose -f docker-compose.yml -f docker-compose.clamav.yml up -d
+version: '3.8'
+
+services:
+  clamav:
+    image: clamav/clamav:latest
+    container_name: privmail-clamav
+    restart: unless-stopped
+    # Kein Port nach außen – nur intern für das Backend erreichbar.
+    volumes:
+      - ./data/clamav:/var/lib/clamav
+    healthcheck:
+      test: ['CMD-SHELL', 'clamdscan --version || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - privmail-network
+
+  backend:
+    environment:
+      - AV_ENABLED=true
+      - AV_FAIL_CLOSED=true
+      - CLAMAV_HOST=clamav
+      - CLAMAV_PORT=3310
+    depends_on:
+      - clamav
+
+networks:
+  privmail-network:
+    external: false
