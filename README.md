@@ -68,5 +68,5 @@ Siehe [`docs/`](./docs):
 
 ## Eigentümer
 
-Dieses Projekt gehört [ethartech](https://ethartech.de/). Alle Rechte an Marke
+Dieses Projekt gehört Ethar. Alle Rechte an Marke
 und Code liegen beim Eigentümer.
