@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, Globe, Server, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, Globe, Server, FileText, ShieldCheck, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const links = [
   { href: '/admin', label: 'Übersicht', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Benutzer', icon: Users },
   { href: '/admin/domains', label: 'Domains', icon: Globe },
+  { href: '/admin/oidc-clients', label: 'OIDC-Clients', icon: KeyRound },
+  { href: '/admin/whitelist', label: 'Whitelist', icon: ShieldCheck },
   { href: '/admin/system', label: 'System', icon: Server },
   { href: '/admin/logs', label: 'Logs', icon: FileText },
 ];

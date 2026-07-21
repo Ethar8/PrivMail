@@ -3,49 +3,56 @@
 ## Voraussetzungen
 
 - **Docker** 24 oder höher
-- **Docker Compose** (v2, als `docker compose` Plugin)
-- Folgende Ports müssen verfügbar sein:
-  - **2525** – SMTP
-  - **2143** – IMAP
-  - **3000** – REST API
-  - **8080** – HTTP (Webmail)
+- **Docker Compose** v2 (`docker compose`)
+- Freie Ports: **80**, **443**, SMTP (Default **2525**), IMAP (Default **2143**)
+- Eine Domain mit DNS-Zugriff (Produktion)
 
-## 1-Klick-Installation
+## Produktions-Installation (empfohlen)
 
-1. Repository klonen:
+```bash
+git clone https://github.com/ethartech/privmail.git
+cd privmail
+chmod +x install.sh scripts/*.sh infrastructure/scripts/*.sh
 
-   ```bash
-   git clone https://github.com/ethartech/privmail.git
-   cd privmail
-   ```
+# 1) Domain + Secrets + Nginx
+./scripts/setup-wizard.sh --domain mail.example.com --yes
+# oder interaktiv: ./scripts/setup-wizard.sh
 
-2. Installationsskript ausführen:
+# 2) Stack starten
+./install.sh
 
-   ```bash
-   chmod +x install.sh
-   ./install.sh
-   ```
+# 3) TLS (Let's Encrypt) – DNS A/AAAA für DOMAIN, vault.*, photos.* müssen stehen
+./infrastructure/scripts/setup-ssl.sh mail.example.com
 
-   Das Skript erstellt die notwendigen Verzeichnisse, prüft die Umgebungsvariablen in `.env` und startet alle Dienste per Docker Compose.
+# 4) DKIM + DNS-Hinweise
+./infrastructure/scripts/setup-dkim.sh mail.example.com
+./infrastructure/scripts/setup-dns.sh mail.example.com <SERVER-IP>
 
-3. Nach erfolgreichem Start das Setup unter folgender Adresse aufrufen:
+# 5) Host-Firewall (optional, empfohlen)
+sudo ./infrastructure/scripts/setup-firewall.sh
 
-   ```
-   http://localhost:8080/setup
-   ```
+# 6) Probe
+DOMAIN=mail.example.com ./scripts/prod-deploy-probe.sh
+```
 
-   Dort den ersten Admin-Benutzer anlegen.
+Admin-Setup im Browser: `https://mail.example.com/setup`
 
-## Nach der Installation
+## Lokale Entwicklung / E2E
 
-Nach dem Setup sind alle Dienste betriebsbereit:
+```bash
+./scripts/e2e-prepare.sh
+./scripts/e2e-make-certs.sh
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+ALLOW_SELF_SIGNED=true DOMAIN=privmail.test \
+  CURL_EXTRA_ARGS='-k --resolve privmail.test:443:127.0.0.1 --resolve vault.privmail.test:443:127.0.0.1 --resolve photos.privmail.test:443:127.0.0.1' \
+  ./scripts/prod-deploy-probe.sh
+```
 
-- **Webmail:** `http://localhost:8080`
-- **SMTP:** Port `2525` (STARTTLS)
-- **IMAP:** Port `2143` (STARTTLS)
-- **API:** Port `3000`
+Setup: `https://privmail.test/setup` (Self-Signed, Browser-Warnung erwartbar).
 
-DNS-Einträge (MX, SPF, DKIM, DMARC) sollten gemäß der [Sicherheitsdokumentation](security.md) konfiguriert werden, um E-Mail-Zustellung zu gewährleisten.
+## Windows / Docker Desktop
+
+Siehe **[windows-docker.md](windows-docker.md)**.
 
 ## Manuelles Dev-Setup
 
@@ -55,37 +62,30 @@ Voraussetzungen: Node.js 22, PostgreSQL 16
 
 ```bash
 cd backend
-cp .env.example .env
-# .env anpassen (insbesondere DATABASE_URL)
-npm install
+cp .env.example .env   # ALLOW_INSECURE_DEV nur lokal
+npm ci
 npm run dev
 ```
-
-Der Backend-Server startet auf Port 3000.
 
 ### Frontend
 
-Voraussetzungen: Node.js 22
-
 ```bash
 cd frontend/web
-cp .env.example .env.local
-npm install
+npm ci
 npm run dev
 ```
 
-Das Frontend startet auf Port 8080.
+## Nach der Installation prüfen
+
+| Check | Befehl / Ort |
+|-------|----------------|
+| HTTPS + Header + OIDC | `./scripts/prod-deploy-probe.sh` |
+| SSO (lokal) | `./scripts/e2e-container-sso.sh` |
+| DNS MX/SPF/DKIM/DMARC | Admin → DNS-Check |
+| Firewall | `docs/firewall.md` |
 
 ## Deinstallation
 
 ```bash
-docker compose down -v
-rm -rf data/
-```
-
-Zusätzlich das geklonte Repository-Verzeichnis löschen, falls nicht mehr benötigt:
-
-```bash
-cd ..
-rm -rf privmail
+./infrastructure/scripts/uninstall.sh
 ```

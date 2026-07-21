@@ -8,6 +8,19 @@ import { createSMTPSession } from '../../mail/smtp/session';
 import { parseMessage } from '../../mail/smtp/parser-message';
 import * as net from 'net';
 
+jest.mock('../../models/alias', () => ({
+  resolveLocalRecipient: jest.fn(async (address: string) => {
+    if (address.endsWith('@localhost') || address.endsWith('@example.com')) {
+      return {
+        kind: 'user',
+        user: { id: 'u1', email: address },
+        deliveredTo: address,
+      };
+    }
+    return { kind: 'unknown' };
+  }),
+}));
+
 function fakeSession() {
   const socket = { remoteAddress: '127.0.0.1', write: jest.fn() } as unknown as net.Socket;
   return createSMTPSession(socket);
@@ -45,24 +58,24 @@ describe('SMTP handlers', () => {
     expect(session.mailFrom).toBe('alice@example.com');
   });
 
-  it('rejects RCPT without MAIL FROM', () => {
+  it('rejects RCPT without MAIL FROM', async () => {
     const session = fakeSession();
-    const res = handleRcpt(SMTPParser.parse('RCPT TO:<bob@example.com>'), session);
+    const res = await handleRcpt(SMTPParser.parse('RCPT TO:<bob@example.com>'), session);
     expect(res.startsWith('503')).toBe(true);
   });
 
-  it('accepts RCPT after MAIL FROM for a local domain', () => {
+  it('accepts RCPT after MAIL FROM for a local domain', async () => {
     const session = fakeSession();
     handleMail(SMTPParser.parse('MAIL FROM:<alice@example.com>'), session);
-    const res = handleRcpt(SMTPParser.parse('RCPT TO:<bob@localhost>'), session);
+    const res = await handleRcpt(SMTPParser.parse('RCPT TO:<bob@localhost>'), session);
     expect(res.startsWith('250')).toBe(true);
     expect(session.rcptTo).toContain('bob@localhost');
   });
 
-  it('rejects RCPT for a foreign domain (no open relay)', () => {
+  it('rejects RCPT for a foreign domain (no open relay)', async () => {
     const session = fakeSession();
     handleMail(SMTPParser.parse('MAIL FROM:<alice@example.com>'), session);
-    const res = handleRcpt(SMTPParser.parse('RCPT TO:<victim@other-domain.com>'), session);
+    const res = await handleRcpt(SMTPParser.parse('RCPT TO:<victim@other-domain.com>'), session);
     expect(res.startsWith('550')).toBe(true);
     expect(session.rcptTo).not.toContain('victim@other-domain.com');
   });

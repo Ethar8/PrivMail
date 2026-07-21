@@ -1,21 +1,20 @@
-import { authApi, getToken, setToken, clearToken, AuthUser } from './api';
+import { authApi, setToken, clearToken, AuthUser } from './api';
 
 export type { AuthUser } from './api';
 
 export async function login(email: string, password: string): Promise<AuthUser> {
   const res = await authApi.login(email, password);
-  setToken(res.token);
+  setToken('cookie-managed');
   return res.user;
 }
 
 export async function setup(email: string, password: string, displayName?: string): Promise<AuthUser> {
   const res = await authApi.setup(email, password, displayName);
-  setToken(res.token);
+  setToken('cookie-managed');
   return res.user;
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  if (!getToken()) return null;
   try {
     const res = await authApi.me();
     return res.user;
@@ -30,5 +29,6 @@ export function logout(): void {
 }
 
 export function isAuthenticated(): boolean {
-  return getToken() !== null;
+  // httpOnly cookie cannot be read from JS synchronously.
+  return true;
 }

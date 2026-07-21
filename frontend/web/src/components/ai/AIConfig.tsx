@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { configureAI, loadAIConfig, AIProvider } from '@/lib/ai';
+import { configureAI, loadAIConfig, loadSecurityConfig, saveSecurityConfig, AIProvider } from '@/lib/ai';
 
 export function AIConfig() {
   const [provider, setProvider] = useState<AIProvider['provider']>('ollama');
@@ -13,6 +13,7 @@ export function AIConfig() {
   const [model, setModel] = useState('llama3');
   const [enabled, setEnabled] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [securityEnabled, setSecurityEnabled] = useState(false);
 
   useEffect(() => {
     const config = loadAIConfig();
@@ -23,10 +24,15 @@ export function AIConfig() {
       setModel(config.model);
       setEnabled(config.enabled);
     }
+    const secConfig = loadSecurityConfig();
+    if (secConfig) {
+      setSecurityEnabled(secConfig.enabled);
+    }
   }, []);
 
   const handleSave = () => {
     configureAI({ provider, endpoint, apiKey: apiKey || undefined, model, enabled });
+    saveSecurityConfig({ enabled: securityEnabled });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -39,6 +45,16 @@ export function AIConfig() {
           <p className="text-sm text-muted-foreground">Aktiviere KI-gestützte Zusammenfassungen und Antwortvorschläge.</p>
         </div>
         <Switch checked={enabled} onCheckedChange={setEnabled} />
+      </div>
+
+      <div className="flex items-center justify-between border-t border-border pt-4">
+        <div>
+          <h3 className="font-medium">Sicherheitscheck</h3>
+          <p className="text-sm text-muted-foreground">
+            Prüft E-Mails VOR dem Öffnen auf Phishing, Betrug und Schadcode mit einem lokalen LLM.
+          </p>
+        </div>
+        <Switch checked={securityEnabled} onCheckedChange={setSecurityEnabled} />
       </div>
 
       <div>

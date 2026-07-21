@@ -2,15 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Settings, Shield, Lock, Sparkles, ShieldAlert, User } from 'lucide-react';
+import { Settings, Shield, Lock, Sparkles, ShieldAlert, User, Upload, AtSign, Filter, CalendarOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const links = [
   { href: '/dashboard/settings/general', label: 'Allgemein', icon: Settings },
   { href: '/dashboard/settings/security', label: 'Sicherheit', icon: Shield },
   { href: '/dashboard/settings/encryption', label: 'Verschlüsselung', icon: Lock },
+  { href: '/dashboard/settings/aliases', label: 'Aliase', icon: AtSign },
+  { href: '/dashboard/settings/filters', label: 'Filter', icon: Filter },
+  { href: '/dashboard/settings/autoresponder', label: 'Abwesenheit', icon: CalendarOff },
   { href: '/dashboard/settings/ai', label: 'KI', icon: Sparkles },
   { href: '/dashboard/settings/spam', label: 'Spam', icon: ShieldAlert },
+  { href: '/dashboard/settings/import', label: 'Import', icon: Upload },
   { href: '/dashboard/settings/account', label: 'Konto', icon: User },
 ];
 

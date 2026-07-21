@@ -12,13 +12,10 @@ const allowlist = config.corsOrigins as readonly string[];
 export const corsMiddleware = cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowlist.length === 0) {
-      // No whitelist configured: permissive only outside production.
-      return callback(null, !config.isProduction);
-    }
+    // Immer explizite Prüfung, auch in Entwicklung (Punkt10)
     return callback(null, allowlist.includes(origin));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-XSRF-TOKEN'],
 });

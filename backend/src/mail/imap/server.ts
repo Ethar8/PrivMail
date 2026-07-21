@@ -8,14 +8,18 @@ import { handleIdleDone } from './handlers/idle';
 import { IMAPResponse } from './response';
 import { createIMAPSession, IMAPSession } from './session';
 import { getSecureContext } from '../tls-context';
+import { RateLimiter } from '../../api/middleware/rate-limit';
+import { RATE_LIMIT_WINDOW_MS, AUTH_RATE_LIMIT_MAX } from '../../config/constants';
 
 export class IMAPServer {
   private server: net.Server;
   private port: number;
   private sessions = new Set<IMAPSession>();
+  private authLimiter: RateLimiter;
 
   constructor(port: number = config.imapPort) {
     this.port = port;
+    this.authLimiter = new RateLimiter(RATE_LIMIT_WINDOW_MS, AUTH_RATE_LIMIT_MAX);
     this.server = net.createServer((socket) => this.handleConnection(socket));
   }
 
@@ -95,6 +99,16 @@ export class IMAPServer {
     }
 
     const cmd = IMAPParser.parse(line);
+
+    if (cmd.name === 'LOGIN') {
+      const clientIp = session.remoteAddress;
+      if (this.authLimiter.isLimited(clientIp)) {
+        session.socket.write(IMAPResponse.no(cmd.tag, 'Too many authentication attempts, try again later'));
+        return;
+      }
+      this.authLimiter.hit(clientIp);
+    }
+
     const { response, closeAfter, startTls } = await IMAPHandler.handle(cmd, session);
     session.socket.write(response);
     if (startTls) {

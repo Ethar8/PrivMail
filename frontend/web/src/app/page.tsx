@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { authApi, getToken } from '@/lib/api';
+import { authApi } from '@/lib/api';
 
 export default function HomePage() {
   const router = useRouter();
@@ -10,10 +10,17 @@ export default function HomePage() {
   useEffect(() => {
     authApi
       .setupRequired()
-      .then((res) => {
-        if (res.setupRequired) router.replace('/setup');
-        else if (getToken()) router.replace('/dashboard/inbox');
-        else router.replace('/login');
+      .then(async (res) => {
+        if (res.setupRequired) {
+          router.replace('/setup');
+          return;
+        }
+        try {
+          await authApi.me();
+          router.replace('/dashboard/inbox');
+        } catch {
+          router.replace('/login');
+        }
       })
       .catch(() => router.replace('/login'));
   }, [router]);

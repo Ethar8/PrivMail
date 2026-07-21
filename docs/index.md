@@ -27,6 +27,9 @@ PrivMail ist eine selbstgehostete, Ende-zu-Ende-verschlüsselte E-Mail-Plattform
 | [Benutzerhandbuch](user-guide.md) | Webmail-Nutzung: Postfächer, Verfassen, Suche, Offline-Modus |
 | [API-Referenz](api-reference.md) | Vollständige REST-API Dokumentation |
 | [Sicherheit](security.md) | Bedrohungsmodell, TLS, DNS-Einträge, WebAuthn, Spam-Schutz |
+| [Firewall](firewall.md) | Öffentliche vs. interne Ports, ufw-Skript |
+| [Suite SSO](sso.md) | OIDC-IdP, Vaultwarden & Immich anbinden, Master-Passwort-Hinweis |
+| [Release](../CHANGELOG.md) | Versionshistorie (aktuell **1.0.0**) |
 | [RFC 9788](rfc9788.md) | Header-Verschlüsselung nach RFC 9788 |
 | [Spam-Filter](spam-filter.md) | Funktionsweise des Spam-Filters |
 | [AI-Assistent](ai-assistant.md) | Konfiguration und Nutzung des AI-Assistenten |

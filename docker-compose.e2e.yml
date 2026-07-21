@@ -1,0 +1,40 @@
+# E2E override: DNS-Aliase + CA-Trust für Vaultwarden/Immich
+services:
+  nginx:
+    networks:
+      privmail-network:
+        aliases:
+          - privmail.test
+          - vault.privmail.test
+          - photos.privmail.test
+
+  # Backend: Zertifikate mounten (TLS-Guard + STARTTLS); HTTPS extern via nginx
+  # Volumes ergänzen die Basis-Compose (Mail/Queue/DKIM bleiben erhalten).
+  backend:
+    environment:
+      - TLS_CERT_PATH=/etc/privmail/ssl/fullchain.pem
+      - TLS_KEY_PATH=/etc/privmail/ssl/privkey.pem
+    volumes:
+      - ./infrastructure/nginx/ssl:/etc/privmail/ssl:ro
+      - ./infrastructure/dkim:/etc/privmail/dkim:ro
+
+  vaultwarden:
+    image: vaultwarden/server:latest-alpine
+    volumes:
+      - ./data/vaultwarden:/data
+      - ./infrastructure/nginx/ssl/e2e-ca.crt:/usr/local/share/ca-certificates/privmail-e2e.crt:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - update-ca-certificates >/dev/null 2>&1; exec /start.sh
+
+  immich-server:
+    volumes:
+      - ${IMMICH_UPLOAD_LOCATION:-./data/immich/library}:/data
+      - /etc/localtime:/etc/localtime:ro
+      - ./infrastructure/nginx/ssl/e2e-ca.crt:/usr/local/share/ca-certificates/privmail-e2e.crt:ro
+    environment:
+      - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/privmail-e2e.crt
+
+  # Vaultwarden/Immich lösen privmail.test über nginx-Netzwerk-Aliase auf
+  # (kein host-gateway — vermeidet Loop über den Host-Port).

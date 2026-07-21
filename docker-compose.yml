@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   nginx:
     image: nginx:alpine
@@ -15,6 +13,8 @@ services:
     depends_on:
       - backend
       - frontend
+      - vaultwarden
+      - immich-server
     networks:
       - privmail-network
 
@@ -34,14 +34,33 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/privmail
       - JWT_SECRET=${JWT_SECRET}
-      - SESSION_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET:-${JWT_SECRET}}
       - DOMAIN=${DOMAIN}
+      - VAULT_HOST=${VAULT_HOST:-vault.${DOMAIN}}
+      - PHOTOS_HOST=${PHOTOS_HOST:-photos.${DOMAIN}}
+      - OIDC_ISSUER=${OIDC_ISSUER:-https://${DOMAIN}}
+      - OIDC_VAULTWARDEN_CLIENT_ID=${OIDC_VAULTWARDEN_CLIENT_ID:-vaultwarden}
+      - OIDC_VAULTWARDEN_CLIENT_SECRET=${OIDC_VAULTWARDEN_CLIENT_SECRET}
+      - OIDC_IMMICH_CLIENT_ID=${OIDC_IMMICH_CLIENT_ID:-immich}
+      - OIDC_IMMICH_CLIENT_SECRET=${OIDC_IMMICH_CLIENT_SECRET}
+      - VAULTWARDEN_URL=${VAULTWARDEN_URL:-https://${VAULT_HOST:-vault.${DOMAIN}}}
+      - IMMICH_URL=${IMMICH_URL:-https://${PHOTOS_HOST:-photos.${DOMAIN}}}
+      - VAULTWARDEN_INTERNAL_URL=http://vaultwarden:80
+      - IMMICH_INTERNAL_URL=http://immich-server:2283
+      - CORS_ORIGINS=${CORS_ORIGINS}
       - SMTP_PORT=2525
       - IMAP_PORT=2143
       - API_PORT=3000
+      - DKIM_SELECTOR=${DKIM_SELECTOR:-privmail}
+      - DKIM_PRIVATE_KEY_PATH=${DKIM_PRIVATE_KEY_PATH:-}
+      # Gleiche Certs wie Nginx (setup-ssl.sh / Self-Signed bis LE). TLS-Guard verlangt sie in production.
+      - TLS_CERT_PATH=${TLS_CERT_PATH:-/etc/privmail/ssl/fullchain.pem}
+      - TLS_KEY_PATH=${TLS_KEY_PATH:-/etc/privmail/ssl/privkey.pem}
     volumes:
       - ./data/mail:/var/lib/privmail/mail
       - ./data/queue:/var/lib/privmail/queue
+      - ./infrastructure/dkim:/etc/privmail/dkim:ro
+      - ./infrastructure/nginx/ssl:/etc/privmail/ssl:ro
     depends_on:
       - postgres
     networks:
@@ -55,7 +74,10 @@ services:
     expose:
       - "3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:3000
+      - NEXT_PUBLIC_API_URL=
+      - NEXT_PUBLIC_VAULT_URL=${NEXT_PUBLIC_VAULT_URL:-https://${VAULT_HOST:-vault.${DOMAIN}}}
+      - NEXT_PUBLIC_PHOTOS_URL=${NEXT_PUBLIC_PHOTOS_URL:-https://${PHOTOS_HOST:-photos.${DOMAIN}}}
+      - NEXT_PUBLIC_MAIL_URL=${NEXT_PUBLIC_MAIL_URL:-https://${DOMAIN}}
     depends_on:
       - backend
     networks:
@@ -73,6 +95,106 @@ services:
       - ./data/postgres:/var/lib/postgresql/data
     networks:
       - privmail-network
+
+  # ---------------------------------------------------------------------------
+  # Vaultwarden – official Bitwarden-compatible password manager (SSO via OIDC)
+  # Image: vaultwarden/server (check https://hub.docker.com/r/vaultwarden/server
+  # for current tags). SSO does NOT replace the vault master password.
+  # ---------------------------------------------------------------------------
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: privmail-vaultwarden
+    restart: unless-stopped
+    expose:
+      - "80"
+    environment:
+      - DOMAIN=${VAULTWARDEN_URL:-https://${VAULT_HOST:-vault.${DOMAIN}}}
+      - SIGNUPS_ALLOWED=${VAULTWARDEN_SIGNUPS_ALLOWED:-false}
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN:-}
+      - SSO_ENABLED=true
+      - SSO_AUTHORITY=${OIDC_ISSUER:-https://${DOMAIN}}
+      - SSO_CLIENT_ID=${OIDC_VAULTWARDEN_CLIENT_ID:-vaultwarden}
+      - SSO_CLIENT_SECRET=${OIDC_VAULTWARDEN_CLIENT_SECRET}
+      - SSO_PKCE=true
+      - SSO_SCOPES=openid profile email
+    volumes:
+      - ./data/vaultwarden:/data
+    depends_on:
+      - backend
+    networks:
+      - privmail-network
+
+  # ---------------------------------------------------------------------------
+  # Immich – official photo/video management (OAuth configured in Admin UI)
+  # Based on https://docs.immich.app/install/docker-compose (IMMICH_VERSION=v3)
+  # Auto Register must stay DISABLED in Immich Admin → Settings → OAuth.
+  # ---------------------------------------------------------------------------
+  immich-server:
+    container_name: privmail-immich-server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v3}
+    restart: unless-stopped
+    expose:
+      - "2283"
+    volumes:
+      - ${IMMICH_UPLOAD_LOCATION:-./data/immich/library}:/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - DB_HOSTNAME=immich-postgres
+      - DB_USERNAME=${IMMICH_DB_USERNAME:-postgres}
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD:-immichchangeme}
+      - DB_DATABASE_NAME=${IMMICH_DB_DATABASE_NAME:-immich}
+      - REDIS_HOSTNAME=immich-redis
+      - IMMICH_HOST=0.0.0.0
+    depends_on:
+      - immich-redis
+      - immich-postgres
+    networks:
+      - privmail-network
+
+  immich-machine-learning:
+    container_name: privmail-immich-ml
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v3}
+    restart: unless-stopped
+    volumes:
+      - immich-model-cache:/cache
+    environment:
+      - DB_HOSTNAME=immich-postgres
+      - DB_USERNAME=${IMMICH_DB_USERNAME:-postgres}
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD:-immichchangeme}
+      - DB_DATABASE_NAME=${IMMICH_DB_DATABASE_NAME:-immich}
+      - REDIS_HOSTNAME=immich-redis
+    networks:
+      - privmail-network
+
+  immich-redis:
+    container_name: privmail-immich-redis
+    image: docker.io/valkey/valkey:8-bookworm
+    restart: unless-stopped
+    healthcheck:
+      test: redis-cli ping || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - privmail-network
+
+  immich-postgres:
+    container_name: privmail-immich-postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    restart: unless-stopped
+    environment:
+      - POSTGRES_PASSWORD=${IMMICH_DB_PASSWORD:-immichchangeme}
+      - POSTGRES_USER=${IMMICH_DB_USERNAME:-postgres}
+      - POSTGRES_DB=${IMMICH_DB_DATABASE_NAME:-immich}
+      - POSTGRES_INITDB_ARGS=--data-checksums
+    volumes:
+      - ${IMMICH_DB_DATA_LOCATION:-./data/immich/postgres}:/var/lib/postgresql/data
+    shm_size: 128mb
+    networks:
+      - privmail-network
+
+volumes:
+  immich-model-cache:
 
 networks:
   privmail-network:

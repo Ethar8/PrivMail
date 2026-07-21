@@ -58,7 +58,7 @@ export class SMTPHandler {
       case 'MAIL':
         return { response: handleMail(command, session), closeAfter: false };
       case 'RCPT':
-        return { response: handleRcpt(command, session), closeAfter: false };
+        return { response: await handleRcpt(command, session), closeAfter: false };
       case 'DATA':
         return { response: handleDataStart(session), closeAfter: false };
       case 'RSET':

@@ -14,13 +14,24 @@ Der Server speichert folgende Daten im Klartext:
 - Domain-Konfiguration
 - SMTP-Kommunikationsmetadaten (Absender, Empfänger, IP, Zeitstempel)
 
-## TLS / Nginx
+## TLS / Nginx – HTTPS-Zwang (Bitwarden/Vaultwarden-Modell)
 
-Für den Produktivbetrieb wird empfohlen, einen Reverse-Proxy mit TLS vorzuschalten:
+PrivMail startet in **Produktion nicht ohne gültiges TLS-Zertifikat** – analog zu Bitwarden/Vaultwarden:
 
-- Nginx oder Caddy mit Let's Encrypt für HTTPS (Port 443)
-- SMTP und IMAP können mit STARTTLS betrieben werden
-- Interne Dienste laufen ohne TLS innerhalb des Docker-Netzwerks
+- **Startup-Guard** (`backend/src/config/tls-guard.ts`): prüft Zertifikat/Key bzw. Reverse-Proxy-Terminierung; bei Fehler `process.exit(1)`.
+- **SMTP/IMAP**: AUTH ohne STARTTLS/TLS wird abgelehnt.
+- **Nginx**: Port 80 nur als 301-Redirect auf HTTPS; HSTS mit `includeSubDomains` und `preload`.
+- **Cookies**: in Produktion immer `Secure` + `httpOnly` + `SameSite=Strict`.
+
+Zertifikate bereitstellen:
+
+1. Let's Encrypt via `infrastructure/scripts/setup-ssl.sh` (automatische Erneuerung)
+2. Eigenes Zertifikat über `TLS_CERT_PATH` / `TLS_KEY_PATH`
+3. TLS-Terminierung am Reverse-Proxy (`X-Forwarded-Proto: https`)
+
+Für lokale Entwicklung: `ALLOW_HTTP_DEV=true` (niemals Default in Produktion).
+
+Windows-Hinweise: siehe [windows-docker.md](windows-docker.md).
 
 ## E-Mail-Auth DNS-Einträge
 

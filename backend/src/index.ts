@@ -1,4 +1,5 @@
 import { config, validateProductionSecrets } from './config/config';
+import { validateTlsConfiguration } from './config/tls-guard';
 import { logger } from './utils/logger';
 import { createApp } from './app';
 import { runMigrations } from './database/migrate';
@@ -14,7 +15,14 @@ async function main(): Promise<void> {
   const secretProblems = validateProductionSecrets();
   if (secretProblems.length > 0) {
     for (const p of secretProblems) logger.error(`FATAL: ${p}`);
-    logger.error('Abbruch: Unsichere Konfiguration im Produktivbetrieb. Bitte Secrets setzen.');
+    logger.error('Abbruch: Unsichere Konfiguration. Setze Secrets/CORS_ORIGINS oder ALLOW_INSECURE_DEV=true nur lokal.');
+    process.exit(1);
+  }
+
+  const tlsProblems = validateTlsConfiguration();
+  if (tlsProblems.length > 0) {
+    for (const p of tlsProblems) logger.error(`FATAL: ${p}`);
+    logger.error('Abbruch: PrivMail startet nicht ohne gültiges TLS-Zertifikat (Vaultwarden-Modell).');
     process.exit(1);
   }
 
@@ -25,9 +33,10 @@ async function main(): Promise<void> {
     logger.warn('Continuing without migrations; database-backed features may fail.');
   }
 
-  const app = createApp();
+  const app = await createApp();
   app.listen(config.apiPort, () => {
     logger.info(`🌐 API-Server läuft auf Port ${config.apiPort}`);
+    logger.info(`OIDC Discovery: ${config.oidc.issuer}/.well-known/openid-configuration`);
   });
 
   const smtp = new SMTPServer(ingestMessage);

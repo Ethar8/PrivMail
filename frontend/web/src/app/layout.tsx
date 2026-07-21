@@ -28,8 +28,20 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="de" suppressHydrationWarning>
+  <head>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#4f46e5" />
+  </head>
       <body>
-        <Providers>{children}</Providers>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-background focus:px-3 focus:py-2 focus:shadow"
+        >
+          Zum Inhalt springen
+        </a>
+        <Providers>
+          <div id="main-content">{children}</div>
+        </Providers>
       </body>
     </html>
   );

@@ -8,6 +8,9 @@ import { query } from '../../database/connection';
 import { outboundQueue } from '../../mail/queue';
 import { runDnsSelfCheck } from '../../dns/self-check';
 import { getAiConfig, saveAiConfig } from '../../spam/ai-config-store';
+import { whitelist, blacklist } from '../../spam/whitelist';
+import { checkSuiteHealth } from '../../services/suite-health';
+import { config } from '../../config/config';
 
 export const adminRouter = Router();
 
@@ -78,6 +81,31 @@ adminRouter.get('/status', async (_req, res) => {
   const freeMem = os.freemem();
   const load = os.loadavg();
   const cpuCount = os.cpus().length;
+  let suite;
+  try {
+    suite = await checkSuiteHealth();
+  } catch {
+    suite = {
+      oidc: {
+        issuer: config.oidc.issuer,
+        discoveryReachable: false,
+        discoveryUrl: `${config.oidc.issuer}/.well-known/openid-configuration`,
+        lastSuccessfulLogin: null,
+      },
+      vaultwarden: {
+        name: 'Vaultwarden',
+        reachable: false,
+        url: config.oidc.vaultUrl,
+        detail: 'health check failed',
+      },
+      immich: {
+        name: 'Immich',
+        reachable: false,
+        url: config.oidc.photosUrl,
+        detail: 'health check failed',
+      },
+    };
+  }
   res.json({
     users: Number(userRows[0]?.count ?? 0),
     emails: Number(mailRows[0]?.count ?? 0),
@@ -96,6 +124,7 @@ adminRouter.get('/status', async (_req, res) => {
       load15: load[2],
       loadPercent: Math.min(100, Math.round((load[0] / cpuCount) * 100)),
     },
+    suite,
   });
 });
 
@@ -122,4 +151,32 @@ adminRouter.post('/ai-config', async (req, res) => {
   if (patch.model === 'disabled') patch.enabled = false;
   const saved = await saveAiConfig(patch);
   res.json(saved);
+});
+
+adminRouter.get('/whitelist', async (_req, res) => {
+  res.json({ whitelist: whitelist.list(), blacklist: blacklist.list() });
+});
+
+adminRouter.post('/whitelist', async (req, res) => {
+  const schema = z.object({ kind: z.enum(['whitelist', 'blacklist']), entry: z.string().min(1) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input' });
+    return;
+  }
+  const store = parsed.data.kind === 'whitelist' ? whitelist : blacklist;
+  await store.add(parsed.data.entry);
+  res.status(201).json({ ok: true, list: store.list() });
+});
+
+adminRouter.delete('/whitelist', async (req, res) => {
+  const schema = z.object({ kind: z.enum(['whitelist', 'blacklist']), entry: z.string().min(1) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input' });
+    return;
+  }
+  const store = parsed.data.kind === 'whitelist' ? whitelist : blacklist;
+  await store.remove(parsed.data.entry);
+  res.json({ ok: true, list: store.list() });
 });

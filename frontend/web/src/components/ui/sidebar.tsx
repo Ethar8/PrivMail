@@ -14,12 +14,14 @@ import {
   Calendar,
   Users,
   Settings,
+  LayoutGrid,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from './logo';
 
 const nav = [
   { href: '/dashboard/compose', label: 'Verfassen', icon: PenSquare, primary: true },
+  { href: '/dashboard/apps', label: 'Apps', icon: LayoutGrid },
   { href: '/dashboard/inbox', label: 'Posteingang', icon: Inbox },
   { href: '/dashboard/sent', label: 'Gesendet', icon: Send },
   { href: '/dashboard/drafts', label: 'Entwürfe', icon: FileEdit },

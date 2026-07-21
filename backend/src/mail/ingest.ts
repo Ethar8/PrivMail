@@ -5,10 +5,11 @@ import { spamFilter } from '../spam/filter';
 import { scanEmailOrThrow } from './av/clamav';
 import { classifyWithLlm, llmScoreToSpamPoints } from '../spam/llm-classifier';
 import { getAiConfig } from '../spam/ai-config-store';
-import { findByEmail } from '../models/user';
+import { resolveLocalRecipient, incrementAliasMailCount } from '../models/alias';
 import { extractAddress } from '../utils/validator';
 import { SPAM_THRESHOLD } from '../config/constants';
 import { logger } from '../utils/logger';
+import { sanitizeHtml } from '../utils/sanitizer';
 
 /**
  * Fire-and-forget LLM re-scoring. Runs AFTER delivery so it never blocks the
@@ -84,29 +85,40 @@ export async function ingestMessage(session: SMTPSession, rawData: string): Prom
 
   for (const rcpt of session.rcptTo) {
     const address = extractAddress(rcpt) ?? rcpt;
-    const user = await findByEmail(address);
-    if (!user) {
+    const resolved = await resolveLocalRecipient(address);
+    if (resolved.kind === 'disabled_alias') {
+      logger.warn(`Rejected delivery to disabled alias ${address}`);
+      continue;
+    }
+    if (resolved.kind === 'unknown') {
       logger.warn(`No local user for recipient ${address}; message dropped`);
       continue;
     }
+    const user = resolved.user;
+    const safeBody = sanitizeHtml(analysis.cleanedBody);
     const id = await mailStore.store({
       userId: user.id,
       messageId: parsed.messageId,
       from: session.mailFrom ?? parsed.from,
-      to: address,
+      to: resolved.deliveredTo,
       subject: parsed.subject,
-      body: analysis.cleanedBody,
+      body: safeBody,
       raw: rawData,
       isEncrypted: /BEGIN PGP MESSAGE/.test(rawData),
       spamScore: analysis.score,
       mailbox: targetMailbox,
     });
+    if (resolved.aliasId) {
+      await incrementAliasMailCount(resolved.aliasId);
+    }
     stored.push({ id, userId: user.id });
-    logger.info(`Delivered to ${address} (mailbox=${targetMailbox}, score=${analysis.score})`);
+    logger.info(
+      `Delivered to ${resolved.deliveredTo} → user ${user.email} (mailbox=${targetMailbox}, score=${analysis.score})`,
+    );
   }
 
   // Non-blocking LLM phishing re-score after delivery.
   if (stored.length > 0) {
-    scheduleLlmRescore(stored, parsed.subject, analysis.cleanedBody, analysis.score);
+    scheduleLlmRescore(stored, parsed.subject, sanitizeHtml(analysis.cleanedBody), analysis.score);
   }
 }

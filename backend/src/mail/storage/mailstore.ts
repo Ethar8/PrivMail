@@ -17,6 +17,7 @@ export interface StoredEmail {
   spam_score: number;
   mailbox: string;
   user_id: string | null;
+  attachment_ids?: string[] | null;
 }
 
 export class MailStore {
@@ -31,12 +32,13 @@ export class MailStore {
     isEncrypted?: boolean;
     spamScore?: number;
     mailbox?: string;
+    attachmentIds?: string[];
   }): Promise<string> {
     const id = randomUUID();
     await query(
       `INSERT INTO emails
-        (id, user_id, message_id, from_email, to_email, subject, body, raw, received_at, is_read, is_encrypted, is_deleted, spam_score, mailbox)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, NOW(), false, $9, false, $10, $11)
+        (id, user_id, message_id, from_email, to_email, subject, body, raw, received_at, is_read, is_encrypted, is_deleted, spam_score, mailbox, attachment_ids)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, NOW(), false, $9, false, $10, $11, $12)
        ON CONFLICT (message_id) DO NOTHING`,
       [
         id,
@@ -50,6 +52,7 @@ export class MailStore {
         params.isEncrypted ?? false,
         params.spamScore ?? 0,
         params.mailbox ?? 'INBOX',
+        params.attachmentIds ?? [],
       ],
     );
     logger.info(`Stored message ${params.messageId} for ${params.to}`);
@@ -96,6 +99,32 @@ export class MailStore {
       userId,
       mailbox,
     ]);
+  }
+
+  async copyBySequence(
+    userId: string,
+    mailbox: string,
+    seq: number,
+    targetMailbox: string,
+  ): Promise<boolean> {
+    const emails = await this.listByUser(userId, mailbox);
+    const src = emails[seq - 1];
+    if (!src) return false;
+
+    await this.store({
+      userId,
+      messageId: `<${Date.now()}.${Math.random().toString(36).slice(2)}@privmail-copy>`,
+      from: src.from_email,
+      to: src.to_email,
+      subject: src.subject,
+      body: src.body,
+      raw: src.raw,
+      isEncrypted: src.is_encrypted,
+      spamScore: src.spam_score,
+      mailbox: targetMailbox,
+      attachmentIds: src.attachment_ids ?? [],
+    });
+    return true;
   }
 
   async updateSpamScore(id: string, userId: string, score: number): Promise<void> {

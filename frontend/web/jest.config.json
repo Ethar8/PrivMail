@@ -1,0 +1,37 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "jsdom",
+  "setupFilesAfterEnv": ["<rootDir>/src/test/setup.ts"],
+  "transform": {
+    "^.+\\.(ts|tsx)$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/src/$1",
+    "\\.(css|less|scss)$": "identity-obj-proxy",
+    "^lucide-react$": "<rootDir>/src/test/__mocks__/lucide-react.tsx"
+  },
+  "testPathIgnorePatterns": ["/node_modules/", "/.next/"],
+  "collectCoverageFrom": [
+    "src/lib/**/*.{ts,tsx}",
+    "src/hooks/**/*.{ts,tsx}",
+    "!src/**/*.d.ts",
+    "!src/lib/pgp.ts",
+    "!src/lib/webauthn.ts",
+    "!src/lib/crypto-local.ts",
+    "!src/lib/rfc9788.ts",
+    "!src/lib/rfc9788-viewer.ts",
+    "!src/lib/db.ts",
+    "!src/lib/srp.ts",
+    "!src/lib/external-decrypt.ts",
+    "!src/hooks/useWebAuthn.ts",
+    "!src/hooks/useLocalCrypto.ts"
+  ],
+  "coverageThreshold": {
+    "global": {
+      "branches": 70,
+      "functions": 70,
+      "lines": 70,
+      "statements": 70
+    }
+  }
+}

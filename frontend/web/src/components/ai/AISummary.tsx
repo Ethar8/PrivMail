@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { summarizeEmail, loadAIConfig } from '@/lib/ai';
+import { summarizeEmail, loadAIConfig, summarizeThread } from '@/lib/ai';
 
-export function AISummary({ content }: { content: string }) {
+export function AISummary({ content, threadId, threadMessages }: { content: string; threadId?: string; threadMessages?: string[] }) {
   const [summary, setSummary] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +14,11 @@ export function AISummary({ content }: { content: string }) {
     setLoading(true);
     setError(null);
     try {
-      setSummary(await summarizeEmail(content));
+      if (threadId && threadMessages && threadMessages.length > 1) {
+        setSummary(await summarizeThread(threadId, threadMessages));
+      } else {
+        setSummary(await summarizeEmail(content));
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -25,7 +29,7 @@ export function AISummary({ content }: { content: string }) {
   if (!loadAIConfig()) return null;
 
   return (
-    <div className="rounded-[var(--radius)] border border-border bg-muted/30 p-3">
+    <div className="rounded-[var(--radius)] border border-border bg-muted/30 p-3" role="region" aria-label="KI-Zusammenfassung">
       {!summary && !loading && (
         <Button variant="ghost" size="sm" onClick={handleSummarize}>
           <Sparkles size={14} /> KI-Zusammenfassung

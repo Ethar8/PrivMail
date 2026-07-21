@@ -6,17 +6,20 @@ import { SMTPParser } from './parser';
 import { SMTPHandler, OnMessage } from './handlers';
 import { SMTPResponse } from './response';
 import { createSMTPSession, SMTPSession, resetTransaction } from './session';
-import { SMTP_MAX_LINE, SMTP_MAX_MESSAGE_SIZE } from '../../config/constants';
+import { SMTP_MAX_LINE, SMTP_MAX_MESSAGE_SIZE, AUTH_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from '../../config/constants';
 import { getSecureContext } from '../tls-context';
+import { RateLimiter } from '../../api/middleware/rate-limit';
 
 export class SMTPServer {
   private server: net.Server;
   private port: number;
   private onMessage: OnMessage;
+  private authLimiter: RateLimiter;
 
   constructor(onMessage: OnMessage, port: number = config.smtpPort) {
     this.port = port;
     this.onMessage = onMessage;
+    this.authLimiter = new RateLimiter(RATE_LIMIT_WINDOW_MS, AUTH_RATE_LIMIT_MAX);
     this.server = net.createServer((socket) => this.handleConnection(socket));
   }
 
@@ -159,6 +162,16 @@ export class SMTPServer {
     }
 
     const command = SMTPParser.parse(line);
+
+    if (command.verb === 'AUTH') {
+      const clientIp = session.remoteAddress;
+      if (this.authLimiter.isLimited(clientIp)) {
+        session.socket.write(SMTPResponse.tempFailure('Too many authentication attempts, try again later'));
+        return;
+      }
+      this.authLimiter.hit(clientIp);
+    }
+
     const { response, closeAfter, startTls } = await SMTPHandler.handle(
       command,
       session,

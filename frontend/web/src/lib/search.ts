@@ -1,14 +1,22 @@
 import { getDB, LocalEmail, mapEmailRow } from './db';
+import { naturalLanguageToSearchTerms, isAIEnabled } from './ai';
 
-/**
- * Privacy-preserving full-text search. Runs entirely against the local SQLite
- * FTS5 index in the browser (OPFS). The server never receives the query.
- */
 export async function searchEmailsLocally(query: string, mailbox?: string): Promise<LocalEmail[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
+
+  let searchText = trimmed;
+  if (isAIEnabled() && /\s/.test(trimmed) && trimmed.split(/\s+/).length >= 3) {
+    try {
+      searchText = await naturalLanguageToSearchTerms(trimmed);
+    } catch {
+      searchText = trimmed;
+    }
+  }
+
   const { sql } = await getDB();
-  const ftsQuery = sanitizeFtsQuery(trimmed);
+  const ftsQuery = sanitizeFtsQuery(searchText);
+  if (!ftsQuery) return [];
 
   const rows = mailbox
     ? await sql`
@@ -27,12 +35,14 @@ export async function searchEmailsLocally(query: string, mailbox?: string): Prom
   return rows.map(mapEmailRow);
 }
 
-function sanitizeFtsQuery(query: string): string {
-  // Escape double quotes and wrap terms to make a safe prefix query.
+export function sanitizeFtsQuery(query: string): string {
   const terms = query
-    .replace(/["]/g, '')
+    .replace(/["'*^()~:!\-?;=<>%&|\\\/\n\r\t\0]+/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
-    .map((t) => `"${t}"*`);
-  return terms.join(' ');
+    .map((t) => t.substring(0, 64))
+    .filter((t) => t.length > 0);
+
+  if (terms.length === 0) return '';
+  return terms.map((t) => `"${t}"`).join(' ');
 }

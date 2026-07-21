@@ -34,8 +34,12 @@ PrivMail kann E-Mails für mehrere Domains empfangen:
 
 1. Auf **Domains** im Admin-Panel navigieren.
 2. **Domain hinzufügen** und die Domain angeben.
-3. Die notwendigen DNS-Einträge werden angezeigt (MX, SPF, DKIM, DMARC).
-4. DKIM-Schlüssel können im Panel generiert werden.
+3. Die notwendigen DNS-Einträge werden angezeigt (MX, SPF, DKIM, DMARC) bzw. via
+   `./infrastructure/scripts/setup-dns.sh <domain> <server-ip>`.
+4. **DKIM-Schlüssel** werden auf dem Server erzeugt (nicht im Web-Panel):
+   `./infrastructure/scripts/setup-dkim.sh <domain>`
+   Anschließend den ausgegebenen TXT-Record beim DNS-Anbieter setzen und
+   `DKIM_PRIVATE_KEY_PATH` / Volume `infrastructure/dkim` (Compose) prüfen.
 
 ## Systemstatus
 

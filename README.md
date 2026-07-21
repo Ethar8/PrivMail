@@ -1,72 +1,135 @@
-# PrivMail
+# PrivMail Suite **1.0.0**
 
-Eine vollständige, produktionsreife, quelloffene E-Mail-Plattform mit
-Ende-zu-Ende-Verschlüsselung, verschlüsselten Headern (RFC 9788), Offline-Modus,
-lokaler Volltextsuche und eigenem SMTP-/IMAP-Server – komplett selbst geschrieben
-in TypeScript. Keine Forks, kein Postfix, kein Dovecot, kein Stalwart.
+Selbst gehostete E-Mail-Plattform mit zentralem Login (OIDC) für **Vaultwarden** (Passwörter)
+und **Immich** (Fotos). Jeder Betreiber betreibt eine **eigene, unabhängige** Instanz —
+mit eigener Domain, eigenen Secrets und ohne Abhängigkeit von der Infrastruktur eines anderen
+Betreibers.
 
-> **Status:** In aktiver Entwicklung. Das Gerüst und die Kernkomponenten sind
-> implementiert; einzelne Features werden iterativ vervollständigt und getestet.
+Release-Notes: [`docs/RELEASE.md`](docs/RELEASE.md) · Changelog: [`CHANGELOG.md`](CHANGELOG.md) · Version: `VERSION`
 
-## Features
+Kein zentrales Anthropic-/Cursor-/Cloud-Konto ist erforderlich. Optionale Cloud-KI ist nur
+ein vom Betreiber gewählter Zusatz.
 
-| Nr. | Feature | Beschreibung |
-|-----|---------|--------------|
-| 1 | **E2EE (OpenPGP)** | Client-seitige Ver- und Entschlüsselung mit OpenPGP.js. |
-| 2 | **RFC 9788** | Header-Verschlüsselung (Betreff, Absender, Empfänger). |
-| 3 | **Offline-Modus** | Lokale Speicherung in SQLite (WASM + OPFS). |
-| 4 | **Lokale Volltextsuche** | FTS5-basierte Suche – der Server sieht die Anfrage nie. |
-| 5 | **1-Click-Installation** | Docker-Compose + `install.sh`. |
-| 6 | **Spam- & Tracking-Schutz** | Bayes, Blacklist, URL-Prüfung, Tracking-Pixel-Entfernung. |
-| 7 | **KI-Assistent** | Eigene OpenAI-API oder lokales LLM (Ollama). |
-| 8 | **2FA mit YubiKey** | WebAuthn/FIDO2. |
-| 9 | **Modernes Webdesign** | Next.js 15 + TailwindCSS + Shadcn UI, Dark/Light Mode. |
-| 10 | **Kalender & Kontakte** | Verschlüsselter Kalender und Adressbuch. |
-| 11 | **Admin-Panel** | Web-UI für Nutzer-, Domänen- und Systemverwaltung. |
-| 12 | **Eigener SMTP/IMAP-Server** | Komplett selbst geschrieben in Node.js/TypeScript. |
+## Voraussetzungen
 
-## Technologie-Stack
-
-- **Backend:** Node.js 22 + Express + TypeScript
-- **Frontend:** Next.js 15 + React + TypeScript
-- **Styling:** TailwindCSS + Shadcn UI
-- **DB (Server):** PostgreSQL 16
-- **DB (Client):** SQLite (WASM) + OPFS
-- **Krypto:** OpenPGP.js
-- **Container:** Docker + Docker Compose
-- **Tests:** Jest + Supertest
+- Linux-Server (oder vergleichbar) mit **Docker** + **Docker Compose**
+- Eine Domain, die **du** kontrollierst
+- Offene Ports **80/443** (HTTPS) sowie SMTP/IMAP nach Bedarf (`2525`/`2143` oder 25/143 hinter Firewall)
+- Für öffentliches TLS: DNS zeigt bereits auf diesen Server (siehe unten)
 
 ## Schnellstart
 
 ```bash
-git clone <repo-url> privmail
-cd privmail
+git clone <repo-url> privmail-suite
+cd privmail-suite
+
+# 1) Deine Domain & Hosts eintragen (Secrets werden automatisch erzeugt)
+./scripts/setup-wizard.sh
+# oder nicht-interaktiv:
+# ./scripts/setup-wizard.sh --domain mail.example.org --yes
+
+# 2) Stack starten
 ./install.sh
+
+# 3) Nach gesetztem DNS: Zertifikat holen
+./infrastructure/scripts/setup-ssl.sh mail.example.org
+
+# 4) DKIM + DNS-Hinweise
+./infrastructure/scripts/setup-dkim.sh mail.example.org
+./infrastructure/scripts/setup-dns.sh mail.example.org <DEINE-SERVER-IP>
+
+# 5) Optional: Host-Firewall
+sudo ./infrastructure/scripts/setup-firewall.sh
+
+# 6) Produktions-Probe
+DOMAIN=mail.example.org ./scripts/prod-deploy-probe.sh
+
+# 7) Admin-Konto im Browser
+# https://mail.example.org/setup
 ```
 
-Danach:
+Ersetze `mail.example.org` überall durch **deine** Domain.
 
-- Web-UI: <http://localhost:8080>
-- Ersten Nutzer anlegen: <http://localhost:8080/setup>
-- SMTP: `localhost:2525`
-- IMAP: `localhost:2143`
+## DNS-Einträge, die DU selbst bei deinem Domain-Anbieter setzen musst
+
+Niemand außer dir kann Records bei deinem Registrar anlegen. Typisches Minimum für die Suite:
+
+| Typ | Name / Host | Ziel |
+|-----|-------------|------|
+| A oder AAAA | `<DEINE-DOMAIN>` | `<DEINE-SERVER-IP>` |
+| A oder AAAA | `vault.<DEINE-DOMAIN>` *oder dein gewählter Vault-Host* | `<DEINE-SERVER-IP>` |
+| A oder AAAA | `photos.<DEINE-DOMAIN>` *oder dein gewählter Photos-Host* | `<DEINE-SERVER-IP>` |
+
+Vorschläge `vault.` / `photos.` sind nur Defaults im Wizard — du kannst andere Hostnamen wählen.
+
+Zusätzlich für **Mail-Zustellung** (nicht für reines SSO nötig): MX, SPF, DKIM, DMARC, PTR —
+Details in [`docs/security.md`](docs/security.md).
+
+Hilfstext erzeugen:
+
+```bash
+./infrastructure/scripts/setup-dns.sh <DEINE-DOMAIN> <DEINE-SERVER-IP>
+```
+
+## Was der Setup-Wizard für dich erledigt
+
+- schreibt `.env` (Domain, Vault-/Photos-Hosts, CORS, App-URLs)
+- generiert kryptografisch starke Secrets (JWT, OIDC-Client-Secrets, DB-Passwörter, …)
+- erzeugt `infrastructure/nginx/nginx.conf` aus `nginx.conf.template` (keine feste Domain im Repo)
+- Migrationen laufen automatisch beim Backend-Start
+
+## Unabhängigkeit der Instanz
+
+- Keine geteilte Datenbank oder geteiltes Login mit anderen PrivMail-Installationen
+- OIDC-Issuer ist immer `https://<DEINE-DOMAIN>` (bzw. `OIDC_ISSUER` in `.env`)
+- Vaultwarden- und Immich-Container gehören zu **deiner** Compose-Umgebung
 
 ## Dokumentation
 
-Siehe [`docs/`](./docs):
+| Dokument | Inhalt |
+|----------|--------|
+| [Installation](docs/installation.md) | Details zur Installation |
+| [Konfiguration](docs/configuration.md) | Umgebungsvariablen |
+| [Suite SSO](docs/sso.md) | OIDC, Vaultwarden, Immich |
+| [Sicherheit](docs/security.md) | TLS, DNS-Mail, Threat Model |
+| [TEST-RESULTS.md](TEST-RESULTS.md) | Nachweisbarer SSO-E2E-Lauf |
 
-- [Installation](./docs/installation.md)
-- [Konfiguration](./docs/configuration.md)
-- [API-Referenz](./docs/api-reference.md)
-- [Sicherheit](./docs/security.md)
-- [RFC 9788](./docs/rfc9788.md)
-- [FAQ](./docs/faq.md)
+## Troubleshooting
+
+### Zertifikat wird nicht ausgestellt
+
+Häufigste Ursache: DNS zeigt noch nicht (oder nicht überall) auf den Server. Prüfe:
+
+```bash
+dig +short <DEINE-DOMAIN>
+dig +short vault.<DEINE-DOMAIN>
+dig +short photos.<DEINE-DOMAIN>
+```
+
+Alle müssen deine Server-IP liefern. Port 80 muss für certbot erreichbar sein (`setup-ssl.sh` nutzt standalone).
+
+### SSO schlägt fehl (Redirect-URI)
+
+Häufigste Ursache: **Redirect-URI-Mismatch**. Die bei PrivMail registrierten URIs müssen exakt zu Vaultwarden/Immich passen, z. B.:
+
+- Vaultwarden: `https://<VAULT-HOST>/identity/connect/oidc-signin`
+- Immich: `https://<PHOTOS-HOST>/auth/login` (+ `user-settings`, optional mobile-redirect)
+
+Hosts in `.env` (`VAULT_HOST`, `PHOTOS_HOST`) und in der Immich-Admin-OAuth-Konfiguration müssen übereinstimmen. Nach Host-Änderung: Secrets/Seed bzw. Admin → OIDC-Clients prüfen und Stack neu starten.
+
+### Immich OAuth automatisch setzen
+
+```bash
+./scripts/configure-immich-oauth.sh \
+  --immich-url "https://$PHOTOS_HOST" \
+  --issuer "https://$DOMAIN" \
+  --client-secret "$OIDC_IMMICH_CLIENT_SECRET" \
+  --admin-email "admin@$DOMAIN" \
+  --admin-password '…'
+```
+
+(`autoRegister` bleibt deaktiviert.)
 
 ## Lizenz
 
 [MIT](./LICENSE)
-
-## Eigentümer
-
-Dieses Projekt gehört Ethar. Alle Rechte an Marke
-und Code liegen beim Eigentümer.

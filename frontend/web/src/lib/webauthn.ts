@@ -1,4 +1,4 @@
-import { getToken, setToken } from './api';
+import { setToken } from './api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -11,13 +11,11 @@ function b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
 }
 
 async function req(path: string, method: string, body?: unknown): Promise<Response> {
-  const token = getToken();
   return fetch(`${API_URL}/api${path}`, {
     method,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -96,7 +94,7 @@ export async function loginWebAuthn(): Promise<{ token: string; user: unknown }>
   });
   if (!verifyRes.ok) throw new Error('Login-Verifizierung fehlgeschlagen');
   const result = await verifyRes.json();
-  if (result.token) setToken(result.token);
+  if (result.token) setToken('cookie-managed');
   return result;
 }
 

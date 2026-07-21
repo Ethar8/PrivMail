@@ -21,6 +21,8 @@ function list(value: string | undefined): string[] {
 }
 
 const domain = process.env.DOMAIN ?? 'localhost';
+const vaultHost = (process.env.VAULT_HOST ?? `vault.${domain}`).replace(/^https?:\/\//, '').replace(/\/$/, '');
+const photosHost = (process.env.PHOTOS_HOST ?? `photos.${domain}`).replace(/^https?:\/\//, '').replace(/\/$/, '');
 
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
@@ -32,6 +34,10 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
   sessionSecret: process.env.SESSION_SECRET ?? 'dev-session-secret-change-me',
   domain,
+  /** Public hostname for Vaultwarden (operator-configurable). */
+  vaultHost,
+  /** Public hostname for Immich (operator-configurable). */
+  photosHost,
   // DKIM selector used when publishing/checking the DKIM DNS record
   // (<selector>._domainkey.<domain>).
   dkimSelector: process.env.DKIM_SELECTOR ?? 'privmail',
@@ -70,6 +76,20 @@ export const config = {
       (process.env.IMAP_REQUIRE_TLS ?? (process.env.NODE_ENV === 'production' ? 'true' : 'false'))
         .toLowerCase() === 'true',
   },
+  // OIDC Identity Provider (node-oidc-provider). Issuer is the public HTTPS base URL.
+  oidc: {
+    issuer: (process.env.OIDC_ISSUER ?? `https://${domain}`).replace(/\/$/, ''),
+    vaultwardenClientId: process.env.OIDC_VAULTWARDEN_CLIENT_ID ?? 'vaultwarden',
+    vaultwardenClientSecret: process.env.OIDC_VAULTWARDEN_CLIENT_SECRET ?? '',
+    immichClientId: process.env.OIDC_IMMICH_CLIENT_ID ?? 'immich',
+    immichClientSecret: process.env.OIDC_IMMICH_CLIENT_SECRET ?? '',
+    vaultUrl: process.env.VAULTWARDEN_URL ?? `https://${vaultHost}`,
+    photosUrl: process.env.IMMICH_URL ?? `https://${photosHost}`,
+    vaultHost,
+    photosHost,
+    vaultInternalUrl: process.env.VAULTWARDEN_INTERNAL_URL ?? 'http://vaultwarden:80',
+    photosInternalUrl: process.env.IMMICH_INTERNAL_URL ?? 'http://immich-server:2283',
+  },
 } as const;
 
 export type Config = typeof config;
@@ -87,9 +107,15 @@ export function isLocalDomain(address: string): boolean {
  * Verstoß eine Liste der Probleme zurück (leer = alles ok). Der Aufrufer
  * (index.ts) beendet den Prozess bei nicht-leerer Liste hart.
  */
+/**
+ * Validates secrets and security configuration. In production always enforced.
+ * In development enforced unless ALLOW_INSECURE_DEV=true is explicitly set.
+ */
 export function validateProductionSecrets(): string[] {
   const problems: string[] = [];
-  if (!config.isProduction) return problems;
+  const allowInsecureDev = (process.env.ALLOW_INSECURE_DEV ?? 'false').toLowerCase() === 'true';
+
+  if (!config.isProduction && allowInsecureDev) return problems;
 
   const checks: { name: string; value: string; def: string }[] = [
     { name: 'JWT_SECRET', value: config.jwtSecret, def: DEFAULT_JWT_SECRET },
@@ -105,5 +131,12 @@ export function validateProductionSecrets(): string[] {
       problems.push(`${c.name} ist zu kurz (min. ${MIN_SECRET_LENGTH} Zeichen).`);
     }
   }
+
+  if (config.corsOrigins.length === 0) {
+    problems.push(
+      'CORS_ORIGINS ist leer. Setze eine explizite Whitelist (z. B. http://localhost:8080).',
+    );
+  }
+
   return problems;
 }

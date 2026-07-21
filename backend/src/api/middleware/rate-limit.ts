@@ -36,6 +36,23 @@ export class RateLimiter {
     next();
   };
 
+  isLimited(key: string): boolean {
+    const now = Date.now();
+    const record = this.limits.get(key);
+    if (!record || record.resetAt < now) return false;
+    return record.count >= this.maxRequests;
+  }
+
+  hit(key: string): void {
+    const now = Date.now();
+    let record = this.limits.get(key);
+    if (!record || record.resetAt < now) {
+      record = { count: 0, resetAt: now + this.windowMs };
+      this.limits.set(key, record);
+    }
+    record.count += 1;
+  }
+
   cleanup(): void {
     const now = Date.now();
     for (const [key, record] of this.limits) {

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { Lock, Trash2, Reply, ShieldCheck, Unlock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Lock, Trash2, Reply, ShieldCheck, Unlock, AlertTriangle, AlertCircle, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AISummary } from '@/components/ai/AISummary';
 import { isHeaderProtected, decryptProtectedMessage } from '@/lib/rfc9788-viewer';
+import { mailApi } from '@/lib/api';
 
 interface EmailDetail {
   id: string;
@@ -15,6 +16,13 @@ interface EmailDetail {
   raw?: string;
   received_at: string;
   is_encrypted: boolean;
+}
+
+interface SecurityCheckResult {
+  isSafe: boolean;
+  threatLevel: 'safe' | 'low' | 'medium' | 'high' | 'critical';
+  reasons: string[];
+  warning: string | null;
 }
 
 interface Props {
@@ -29,6 +37,22 @@ export function EmailView({ email, onDelete, onReply }: Props) {
   const [decrypted, setDecrypted] = useState<{ subject: string; from: string; to: string; body: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [securityCheck, setSecurityCheck] = useState<SecurityCheckResult | null>(null);
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [showUnsafe, setShowUnsafe] = useState(false);
+
+  useEffect(() => {
+    setSecurityCheck(null);
+    setShowUnsafe(false);
+    if (email?.id) {
+      setSecurityLoading(true);
+      mailApi
+        .securityCheck(email.id)
+        .then((res) => setSecurityCheck(res.securityCheck))
+        .catch(() => setSecurityCheck(null))
+        .finally(() => setSecurityLoading(false));
+    }
+  }, [email?.id]);
 
   if (!email) {
     return (
@@ -64,8 +88,68 @@ export function EmailView({ email, onDelete, onReply }: Props) {
   const shownTo = decrypted?.to ?? email.to_email;
   const shownBody = decrypted?.body ?? email.body;
 
+  const isCritical = securityCheck?.threatLevel === 'critical' || securityCheck?.threatLevel === 'high';
+  const isBlocked = isCritical && !showUnsafe;
+
   return (
     <div className="flex h-full flex-col">
+      {securityCheck && !securityCheck.isSafe && (
+        <div
+          className={`m-4 rounded-xl border p-4 ${
+            securityCheck.threatLevel === 'critical'
+              ? 'border-red-500 bg-red-50 dark:bg-red-950/30'
+              : securityCheck.threatLevel === 'high'
+                ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30'
+                : securityCheck.threatLevel === 'medium'
+                  ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30'
+                  : 'border-green-400 bg-green-50 dark:bg-green-950/30'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5">
+              {securityCheck.threatLevel === 'critical' && <AlertCircle size={20} className="text-red-500" />}
+              {securityCheck.threatLevel === 'high' && <AlertTriangle size={20} className="text-orange-500" />}
+              {securityCheck.threatLevel === 'medium' && <ShieldAlert size={20} className="text-amber-500" />}
+              {securityCheck.threatLevel === 'low' && <ShieldCheck size={20} className="text-green-500" />}
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold">
+                {securityCheck.threatLevel === 'critical' && 'Phishing-Verdacht! Nicht öffnen!'}
+                {securityCheck.threatLevel === 'high' && 'Vorsicht, verdächtige E-Mail!'}
+                {securityCheck.threatLevel === 'medium' && 'Prüfen Sie diese E-Mail sorgfältig'}
+                {securityCheck.threatLevel === 'low' && 'Sicher'}
+              </h3>
+              {securityCheck.reasons.length > 0 && (
+                <ul className="mt-2 list-inside list-disc text-sm text-muted-foreground">
+                  {securityCheck.reasons.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
+              )}
+              {securityCheck.warning && (
+                <p className="mt-2 text-sm font-medium text-destructive">{securityCheck.warning}</p>
+              )}
+              {isCritical && !showUnsafe && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 gap-2 border-destructive text-destructive hover:bg-destructive/10"
+                  onClick={() => setShowUnsafe(true)}
+                >
+                  <Unlock size={14} />
+                  Trotzdem anzeigen (auf eigene Gefahr)
+                </Button>
+              )}
+              {isCritical && showUnsafe && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Sie haben die Sicherheitswarnung übersprungen. Seien Sie vorsichtig mit Links und Anhängen.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="border-b border-border p-6">
         <div className="mb-2 flex items-start justify-between gap-4">
           <h1 className="text-xl font-semibold">{shownSubject}</h1>
@@ -128,10 +212,18 @@ export function EmailView({ email, onDelete, onReply }: Props) {
           </div>
         )}
 
-        {(!protectedMsg || decrypted) && <AISummary content={shownBody} />}
-        <div className="prose prose-sm mt-4 max-w-none whitespace-pre-wrap dark:prose-invert">
-          {protectedMsg && !decrypted ? '🔒 Inhalt verschlüsselt' : shownBody}
-        </div>
+        {isBlocked ? (
+          <div className="flex items-center justify-center p-12">
+            <p className="text-muted-foreground">Inhalt aus Sicherheitsgründen ausgeblendet.</p>
+          </div>
+        ) : (
+          <>
+            {(!protectedMsg || decrypted) && <AISummary content={shownBody} />}
+            <div className="prose prose-sm mt-4 max-w-none whitespace-pre-wrap dark:prose-invert">
+              {protectedMsg && !decrypted ? '🔒 Inhalt verschlüsselt' : shownBody}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

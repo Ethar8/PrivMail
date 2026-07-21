@@ -7,7 +7,13 @@ import { createApp } from '../../app';
  * which runs in CI with a Postgres service container.
  */
 describe('API (no DB required)', () => {
-  const app = createApp();
+  // OIDC init needs Postgres; without DATABASE_URL the app starts without IdP
+  // so these smoke tests stay DB-free.
+  let app: Awaited<ReturnType<typeof createApp>>;
+
+  beforeAll(async () => {
+    app = await createApp();
+  });
 
   it('GET /health returns ok', async () => {
     const res = await request(app).get('/health');

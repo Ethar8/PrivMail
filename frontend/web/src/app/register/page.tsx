@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { authApi, setToken } from '@/lib/api';
+import { authApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,8 +21,7 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await authApi.register(email, password, displayName || undefined);
-      setToken(res.token);
+      await authApi.register(email, password, displayName || undefined);
       router.replace('/dashboard/inbox');
     } catch (err) {
       setError((err as Error).message);

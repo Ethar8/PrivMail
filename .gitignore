@@ -14,6 +14,23 @@ out/
 !.env.example
 **/.env
 
+# Generated per operator (from nginx.conf.template)
+infrastructure/nginx/nginx.conf
+
+# Operator TLS material (Let's Encrypt / Self-Signed / E2E)
+infrastructure/nginx/ssl/*
+!infrastructure/nginx/ssl/.gitkeep
+
+# DKIM private keys (public DNS snippets may be kept locally)
+infrastructure/dkim/*.private.pem
+infrastructure/dkim/*.pem
+infrastructure/dkim/*.dns.txt
+infrastructure/dkim/*.public.txt
+!infrastructure/dkim/.gitkeep
+
+# TypeScript incremental
+*.tsbuildinfo
+
 # Data
 data/
 

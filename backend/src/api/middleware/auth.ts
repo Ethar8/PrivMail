@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../../config/config';
 import { JWT_EXPIRY, JWT_ALGORITHM } from '../../config/constants';
 import { getTokenVersion } from '../../models/user';
+import { getCookie } from '../../utils/cookies';
 
 export interface AuthedRequest extends Request {
   userId?: string;
@@ -28,14 +29,22 @@ export async function requireAuth(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  // Token aus Cookies oder Authorization Header lesen (Punkt2: httpOnly-Cookie)
+  let token: string | null = null;
   const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
+  if (header?.startsWith('Bearer ')) {
+    token = header.slice(7);
+  } else {
+    token = getCookie(req.headers, 'privmail-token');
+  }
+
+  if (!token) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
   try {
     // Regel 2 – Algorithmus hart erzwingen (verhindert alg:none / Key-Confusion).
-    const payload = jwt.verify(header.slice(7), config.jwtSecret, {
+    const payload = jwt.verify(token, config.jwtSecret, {
       algorithms: [JWT_ALGORITHM],
     }) as JwtPayload;
 

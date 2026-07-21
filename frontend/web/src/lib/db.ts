@@ -18,6 +18,29 @@ export interface LocalEmail {
   headers?: string | null;
 }
 
+export interface LocalCalendarEvent {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  startAt: number;
+  endAt: number;
+  allDay: boolean;
+  encryptedData: string | null;
+  updatedAt: number;
+}
+
+export interface LocalContact {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  organization: string;
+  notes: string;
+  encryptedData: string | null;
+  updatedAt: number;
+}
+
 let dbInstance: SQLocal | null = null;
 let initialized = false;
 
@@ -83,6 +106,49 @@ async function initDB(instance: SQLocal): Promise<void> {
       INSERT INTO emails_fts(rowid, subject, body, from_email, to_email)
       VALUES (new.rowid, new.subject, new.body, new.from_email, new.to_email);
     END
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS calendar_events (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      location TEXT DEFAULT '',
+      start_at INTEGER NOT NULL,
+      end_at INTEGER NOT NULL,
+      all_day INTEGER DEFAULT 0,
+      encrypted_data TEXT,
+      updated_at INTEGER NOT NULL
+    )
+  `;
+
+  await sql`
+    CREATE VIRTUAL TABLE IF NOT EXISTS calendar_fts USING fts5(
+      title, description, location,
+      content='calendar_events',
+      content_rowid='rowid'
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS contacts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      organization TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      encrypted_data TEXT,
+      updated_at INTEGER NOT NULL
+    )
+  `;
+
+  await sql`
+    CREATE VIRTUAL TABLE IF NOT EXISTS contacts_fts USING fts5(
+      name, email, organization, notes,
+      content='contacts',
+      content_rowid='rowid'
+    )
   `;
 }
 
@@ -180,4 +246,124 @@ export function mapEmailRow(row: Record<string, unknown>): LocalEmail {
     labels: (row.labels as string) ?? null,
     headers: (row.headers as string) ?? null,
   };
+}
+
+export async function saveCalendarEventLocally(event: LocalCalendarEvent): Promise<void> {
+  const { sql } = await getDB();
+  await sql`
+    INSERT INTO calendar_events (id, title, description, location, start_at, end_at, all_day, encrypted_data, updated_at)
+    VALUES (${event.id}, ${event.title}, ${event.description}, ${event.location}, ${event.startAt}, ${event.endAt}, ${event.allDay ? 1 : 0}, ${event.encryptedData}, ${event.updatedAt})
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title, description = excluded.description, location = excluded.location,
+      start_at = excluded.start_at, end_at = excluded.end_at, all_day = excluded.all_day,
+      encrypted_data = COALESCE(excluded.encrypted_data, calendar_events.encrypted_data),
+      updated_at = excluded.updated_at
+  `;
+}
+
+export async function getCalendarEventsLocally(fromTime: number, toTime: number): Promise<LocalCalendarEvent[]> {
+  const { sql } = await getDB();
+  const rows = await sql`
+    SELECT * FROM calendar_events WHERE start_at >= ${fromTime} AND end_at <= ${toTime}
+    ORDER BY start_at ASC
+  `;
+  return rows.map(mapCalendarRow);
+}
+
+export async function searchCalendarEventsLocally(query: string): Promise<LocalCalendarEvent[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const { sql } = await getDB();
+  const ftsQuery = sanitizeFtsQuery(trimmed);
+  const rows = await sql`
+    SELECT c.* FROM calendar_events c
+    JOIN calendar_fts fts ON c.rowid = fts.rowid
+    WHERE calendar_fts MATCH ${ftsQuery}
+    ORDER BY c.start_at DESC
+  `;
+  return rows.map(mapCalendarRow);
+}
+
+export async function deleteCalendarEventLocally(id: string): Promise<void> {
+  const { sql } = await getDB();
+  await sql`DELETE FROM calendar_events WHERE id = ${id}`;
+}
+
+function mapCalendarRow(row: Record<string, unknown>): LocalCalendarEvent {
+  return {
+    id: String(row.id),
+    title: String(row.title ?? ''),
+    description: String(row.description ?? ''),
+    location: String(row.location ?? ''),
+    startAt: Number(row.start_at ?? 0),
+    endAt: Number(row.end_at ?? 0),
+    allDay: Number(row.all_day) === 1,
+    encryptedData: (row.encrypted_data as string) ?? null,
+    updatedAt: Number(row.updated_at ?? 0),
+  };
+}
+
+export async function saveContactLocally(contact: LocalContact): Promise<void> {
+  const { sql } = await getDB();
+  await sql`
+    INSERT INTO contacts (id, name, email, phone, organization, notes, encrypted_data, updated_at)
+    VALUES (${contact.id}, ${contact.name}, ${contact.email}, ${contact.phone}, ${contact.organization}, ${contact.notes}, ${contact.encryptedData}, ${contact.updatedAt})
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name, email = excluded.email, phone = excluded.phone,
+      organization = excluded.organization, notes = excluded.notes,
+      encrypted_data = COALESCE(excluded.encrypted_data, contacts.encrypted_data),
+      updated_at = excluded.updated_at
+  `;
+}
+
+export async function getContactsLocally(limit = 100, offset = 0): Promise<LocalContact[]> {
+  const { sql } = await getDB();
+  const rows = await sql`
+    SELECT * FROM contacts ORDER BY name ASC LIMIT ${limit} OFFSET ${offset}
+  `;
+  return rows.map(mapContactRow);
+}
+
+export async function searchContactsLocally(query: string): Promise<LocalContact[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const { sql } = await getDB();
+  const ftsQuery = sanitizeFtsQuery(trimmed);
+  const rows = await sql`
+    SELECT c.* FROM contacts c
+    JOIN contacts_fts fts ON c.rowid = fts.rowid
+    WHERE contacts_fts MATCH ${ftsQuery}
+    ORDER BY c.name ASC
+  `;
+  return rows.map(mapContactRow);
+}
+
+export async function deleteContactLocally(id: string): Promise<void> {
+  const { sql } = await getDB();
+  await sql`DELETE FROM contacts WHERE id = ${id}`;
+}
+
+function mapContactRow(row: Record<string, unknown>): LocalContact {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ''),
+    email: String(row.email ?? ''),
+    phone: String(row.phone ?? ''),
+    organization: String(row.organization ?? ''),
+    notes: String(row.notes ?? ''),
+    encryptedData: (row.encrypted_data as string) ?? null,
+    updatedAt: Number(row.updated_at ?? 0),
+  };
+}
+
+function sanitizeFtsQuery(query: string): string {
+  const terms = query
+    .replace(/["'*^()~:!\-?;=<>%&|\\\/\n\r\t\0]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => t.substring(0, 64))
+    .filter((t) => t.length > 0);
+
+  if (terms.length === 0) return '';
+  return terms.map((t) => `"${t}"`).join(' ');
 }

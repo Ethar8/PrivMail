@@ -15,7 +15,9 @@ export const webauthnRouter = Router();
 
 const rpID = config.domain === 'localhost' ? 'localhost' : config.domain;
 const rpName = 'PrivMail';
-const origin = process.env.WEBAUTHN_ORIGIN ?? `http://${rpID}:8080`;
+const origin =
+  process.env.WEBAUTHN_ORIGIN ??
+  (config.isProduction ? `https://${rpID}` : `http://${rpID}:8080`);
 
 // Registration – start
 webauthnRouter.post('/register', requireAuth, async (req: AuthedRequest, res: Response) => {

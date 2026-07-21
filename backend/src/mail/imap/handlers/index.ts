@@ -19,6 +19,8 @@ import { handleSearch } from './search';
 import { handleAppend } from './append';
 import { handleExpunge } from './expunge';
 import { handleIdleStart } from './idle';
+import { handleCopy } from './copy';
+import { handleSubscribe, handleUnsubscribe, handleLsub } from './subscribe';
 
 export interface IMAPHandleResult {
   response: string;
@@ -64,8 +66,13 @@ export class IMAPHandler {
       case 'RENAME':
         return r(await handleRename(cmd, session));
       case 'LIST':
-      case 'LSUB':
         return r(await handleList(cmd, session));
+      case 'LSUB':
+        return r(await handleLsub(cmd, session));
+      case 'SUBSCRIBE':
+        return r(await handleSubscribe(cmd, session));
+      case 'UNSUBSCRIBE':
+        return r(await handleUnsubscribe(cmd, session));
       case 'STATUS':
         return r(await handleStatus(cmd, session));
       case 'FETCH':
@@ -87,6 +94,8 @@ export class IMAPHandler {
       case 'APPEND':
         // APPEND with an inline literal already buffered by the server layer.
         return r(await handleAppend(cmd, session, ''));
+      case 'COPY':
+        return r(await handleCopy(cmd, session));
       default:
         return r(IMAPResponse.bad(cmd.tag, `Unknown command: ${cmd.name}`));
     }

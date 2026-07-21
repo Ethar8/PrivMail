@@ -5,7 +5,7 @@ import { config } from '../../../config/config';
 import { isTlsAvailable } from '../../tls-context';
 
 export function handleCapability(cmd: IMAPCommand, session: IMAPSession): string {
-  const caps = ['IMAP4rev1', 'IDLE', 'UIDPLUS', 'LITERAL+'];
+  const caps = ['IMAP4rev1', 'IDLE', 'UIDPLUS', 'LITERAL+', 'COPY', 'SUBSCRIBE', 'UNSUBSCRIBE'];
 
   if (isTlsAvailable() && !session.tlsActive) {
     caps.push('STARTTLS');

@@ -23,7 +23,7 @@ describe('MailQueue', () => {
     const queue = new MailQueue(async () => ({ success: true, permanent: false }));
     const delivered: string[] = [];
     queue.on('delivered', (m: QueuedMessage) => delivered.push(m.id));
-    const id = queue.enqueue('a@x.com', ['b@y.com'], 'raw');
+    const id = await queue.enqueue('a@x.com', ['b@y.com'], 'raw');
     expect(queue.size).toBe(1);
     // Drive one processing cycle via the private method through start/stop.
     await (queue as unknown as { process: () => Promise<void> }).process();
@@ -35,7 +35,7 @@ describe('MailQueue', () => {
     const queue = new MailQueue(async (m) =>
       m.isBounce ? { success: true, permanent: false } : { success: false, permanent: true, error: '550' },
     );
-    queue.enqueue('a@x.com', ['b@y.com'], 'raw');
+    await queue.enqueue('a@x.com', ['b@y.com'], 'raw');
     await (queue as unknown as { process: () => Promise<void> }).process();
     // Original removed, bounce enqueued.
     expect(queue.size).toBe(1);
