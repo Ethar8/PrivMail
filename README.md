@@ -10,6 +10,13 @@ Release-Notes: [`docs/RELEASE.md`](docs/RELEASE.md) · Changelog: [`CHANGELOG.md
 Kein zentrales Anthropic-/Cursor-/Cloud-Konto ist erforderlich. Optionale Cloud-KI ist nur
 ein vom Betreiber gewählter Zusatz.
 
+> **Hinweis für Installationen durch andere:** Der Code ist **produktionsreif vorbereitet**
+> (Release 1.0). Zertifikate (Let’s Encrypt) und DNS-Einträge kann dieses Repo **nicht**
+> mitliefern — jeder Betreiber braucht **eigene** Domain, DNS und TLS auf **seinem** Server.
+> Schnellstart unten sowie [`./scripts/prod-deploy-probe.sh`](scripts/prod-deploy-probe.sh)
+> führen dich durch die nötigen Schritte und prüfen, ob die Instanz go-live-tauglich ist.
+> Details: [`docs/installation.md`](docs/installation.md), [`docs/RELEASE.md`](docs/RELEASE.md).
+
 ## Voraussetzungen
 
 - Linux-Server (oder vergleichbar) mit **Docker** + **Docker Compose**
